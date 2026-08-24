@@ -1,5 +1,8 @@
 # lorascout
 
+[![CI](https://github.com/meister5/lorascout/actions/workflows/ci.yml/badge.svg)](https://github.com/meister5/lorascout/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **A LoRa coverage mapper for the M5Stack Cardputer ADV with the Cap LoRa-1262.**
 
 Walk or drive a route, and lorascout records what the SX1262 actually hears at
@@ -92,7 +95,7 @@ transmit are in [`docs/HARDWARE.md`](docs/HARDWARE.md).
 ## Build and flash
 
 ```bash
-git clone https://github.com/<you>/lorascout
+git clone https://github.com/meister5/lorascout
 cd lorascout
 pio run -e cardputer-adv -t upload
 ```
