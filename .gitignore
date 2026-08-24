@@ -1,0 +1,19 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# host test binaries
+build/
+
+# local toolchains / virtualenvs
+.venv/
+venv/
+
+# build artefacts
+*.bin
+*.elf
+*.map
+
+.DS_Store
+.vscode/

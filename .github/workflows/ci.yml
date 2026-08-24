@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core-tests:
+    name: core tests (host compiler)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # lib/core pulls in no Arduino or hardware headers, so the whole tested
+      # surface builds with nothing but a C++17 compiler. -Werror is on.
+      - name: Run test suites
+        run: make test
+
+  pio-tests:
+    name: core tests (platformio)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-native-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Run the same suites through pio
+        run: pio test -e native
+
+  firmware:
+    name: firmware (cardputer-adv)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          # The ESP32-S3 toolchain is a large download; without this the job
+          # spends most of its time fetching a compiler it already had.
+          path: ~/.platformio
+          key: pio-esp32s3-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Build
+        run: pio run -e cardputer-adv
+      - name: Upload firmware image
+        uses: actions/upload-artifact@v4
+        with:
+          name: lorascout-firmware
+          path: |
+            .pio/build/cardputer-adv/firmware.bin
+            .pio/build/cardputer-adv/firmware.elf
+          if-no-files-found: error
