@@ -85,7 +85,7 @@ the colours in QGIS mean the same thing:
 
 ## Hardware
 
-- **M5Stack Cardputer ADV** (ESP32-S3, 8 MB flash, PSRAM, microSD)
+- **M5Stack Cardputer ADV** (ESP32-S3FN8, 8 MB flash, no PSRAM, microSD)
 - **Cap LoRa-1262** (SKU U214): Semtech SX1262 + ATGM336H-6N GNSS
 - a microSD card, and the two stock antennas
 
@@ -98,6 +98,44 @@ transmit are in [`docs/HARDWARE.md`](docs/HARDWARE.md).
 git clone https://github.com/meister5/lorascout
 cd lorascout
 pio run -e cardputer-adv -t upload
+
+# or build both release binaries at once
+tools/package.sh
+```
+
+`tools/package.sh` writes:
+
+| File | Use |
+|---|---|
+| `dist/lorascout-app.bin` | **M5Launcher** — copy to SD, or upload via WebUI/OTA |
+| `dist/lorascout-merged.bin` | **M5Burner** custom firmware, or `esptool` at offset `0x0` |
+
+### M5Launcher
+
+Launcher installs application binaries into an OTA app partition, so use the
+**app** binary:
+
+1. Copy `lorascout-app.bin` to a FAT32 SD card.
+2. In Launcher, open `SD`, select the file, choose `Install`.
+
+It also works through `WUI` (browser upload) or as an `OTA > Favorites` entry
+pointing at a release asset URL. The build is around 650 kB — well inside a
+standard OTA slot — and `tools/package.sh` fails the build if it ever outgrows
+one.
+
+lorascout keeps no filesystem partition of its own: settings live in NVS and
+survey data is written to the microSD card, so there is nothing for Launcher to
+install alongside the app image and nothing to lose when you switch firmware.
+It does not touch the OTA boot partition either, so it cannot brick a Launcher
+install; return to Launcher the way Launcher documents for your device.
+
+### M5Burner / esptool
+
+Use the **merged** binary — it contains the bootloader, partition table and app.
+
+```bash
+esptool --chip esp32s3 --port /dev/ttyACM0 write-flash 0x0 \
+  dist/lorascout-merged.bin
 ```
 
 Then run the tests, which need nothing but a C++17 compiler:
