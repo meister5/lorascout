@@ -61,14 +61,21 @@ jobs:
         run: tools/package.sh
       - name: Report image sizes
         run: ls -l dist/
-      - name: Upload firmware image
+      # Keep this artifact to the bins alone. upload-artifact roots the archive
+      # at the common ancestor of its paths, so adding .pio/ here would push the
+      # bins down to dist/dist/*.bin once downloaded, and the release glob below
+      # would silently match nothing.
+      - name: Upload firmware images
         uses: actions/upload-artifact@v4
         with:
           name: lorascout-firmware
-          path: |
-            dist/lorascout-app.bin
-            dist/lorascout-merged.bin
-            .pio/build/cardputer-adv/firmware.elf
+          path: dist/*.bin
+          if-no-files-found: error
+      - name: Upload debug symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: lorascout-debug
+          path: .pio/build/cardputer-adv/firmware.elf
           if-no-files-found: error
 
   release:
@@ -83,10 +90,12 @@ jobs:
         with:
           name: lorascout-firmware
           path: dist
-      # The .elf rides along in the artifact for debugging, but a release asset
-      # should only be something you can actually flash.
+      # The .elf is a separate artifact; a release asset should only be
+      # something you can actually flash. fail_on_unmatched_files turns a glob
+      # that matches nothing into a red build rather than an empty release.
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.bin
+          fail_on_unmatched_files: true
           generate_release_notes: true
