@@ -53,13 +53,19 @@ jobs:
           key: pio-esp32s3-${{ hashFiles('platformio.ini') }}
       - name: Install PlatformIO
         run: pip install --upgrade platformio
-      - name: Build
-        run: pio run -e cardputer-adv
+      # package.sh runs the same `pio run`, then gates the app image on the
+      # 0xE9 magic and the OTA slot size M5Launcher installs into, and emits
+      # the app/merged pair.
+      - name: Build release binaries
+        run: tools/package.sh
+      - name: Report image sizes
+        run: ls -l dist/
       - name: Upload firmware image
         uses: actions/upload-artifact@v4
         with:
           name: lorascout-firmware
           path: |
-            .pio/build/cardputer-adv/firmware.bin
+            dist/lorascout-app.bin
+            dist/lorascout-merged.bin
             .pio/build/cardputer-adv/firmware.elf
           if-no-files-found: error
