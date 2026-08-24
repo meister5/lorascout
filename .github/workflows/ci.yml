@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -69,3 +70,23 @@ jobs:
             dist/lorascout-merged.bin
             .pio/build/cardputer-adv/firmware.elf
           if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: [core-tests, pio-tests, firmware]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lorascout-firmware
+          path: dist
+      # The .elf rides along in the artifact for debugging, but a release asset
+      # should only be something you can actually flash.
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.bin
+          generate_release_notes: true
