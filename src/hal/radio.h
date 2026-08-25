@@ -58,6 +58,9 @@ private:
     int txDbm_ = 0;
     bool started_ = false;
     const char* lastError_ = "";
+    // Backing store for the messages that carry a RadioLib error code; the
+    // fixed strings elsewhere point straight at literals.
+    char errorBuf_[48] = {};
 };
 
 }  // namespace hal

@@ -1,6 +1,9 @@
 #include "radio.h"
 
 #include <RadioLib.h>
+#include <SPI.h>
+
+#include <cstdio>
 
 #include "../config.h"
 
@@ -8,9 +11,16 @@ namespace lorascout {
 namespace hal {
 namespace {
 
-// NSS, DIO1, RESET, BUSY. RadioLib takes MOSI/MISO/SCK from the board defaults
-// that M5Unified installs, which on the Cardputer ADV are G14/G39/G40.
-SX1262 g_radio = new Module(pins::kLoraNss, pins::kLoraIrq, pins::kLoraRst, pins::kLoraBusy);
+// NSS, DIO1, RESET, BUSY, and the SPI bus, named explicitly.
+//
+// Handing RadioLib the bus object matters twice over. The Module constructor
+// that omits it leaves RadioLib to call SPI.begin() with no arguments, which
+// lands on the ESP32-S3 variant defaults -- SCK 12, MISO 13, MOSI 11 -- and not
+// on the Cap-Bus pins the cap is wired to, so the SX1262 never answers and
+// begin() returns RADIOLIB_ERR_CHIP_NOT_FOUND. It also stops RadioLib calling
+// SPI.end() on a failed probe, which would pull the bus out from under the
+// microSD slot that shares it.
+SX1262 g_radio = new Module(pins::kLoraNss, pins::kLoraIrq, pins::kLoraRst, pins::kLoraBusy, SPI);
 
 volatile bool g_packetFlag = false;
 
@@ -20,9 +30,22 @@ ICACHE_RAM_ATTR void onDio1() { g_packetFlag = true; }
 }  // namespace
 
 bool Radio::begin() {
+    // The Cap-Bus SPI pins are the microSD slot's pins: on the ADV both hang off
+    // SCK 40 / MOSI 14 / MISO 39 with separate chip selects (LoRa 5, card 12).
+    // Whichever peripheral comes up first owns the bus -- SPI.begin() returns
+    // early once the host is running -- and the radio is probed before storage,
+    // so the pin names belong here. -1 for SS: neither driver wants the SPI
+    // peripheral's hardware CS, they drive their own.
+    SPI.begin(pins::kLoraSck, pins::kLoraMiso, pins::kLoraMosi, -1);
+
     const int16_t state = g_radio.begin();
     if (state != RADIOLIB_ERR_NONE) {
-        lastError_ = "SX1262 begin failed";
+        // The numeric code is the difference between "cap not seated" (-2,
+        // chip not found) and a chip that answers but rejects something, so it
+        // goes in front of the user rather than into a debug build only.
+        std::snprintf(errorBuf_, sizeof(errorBuf_),
+                      "SX1262 begin failed (RadioLib %d)", static_cast<int>(state));
+        lastError_ = errorBuf_;
         return false;
     }
     g_radio.setDio1Action(onDio1);
@@ -51,9 +74,12 @@ bool Radio::applyConfig(const RadioConfig& cfg) {
     state = g_radio.setPreambleLength(cfg.preambleSymbols);
     if (state != RADIOLIB_ERR_NONE) { lastError_ = "preamble rejected"; return false; }
 
-    // The 1262 module carries no TCXO of its own; leaving the DIO3 reference on
-    // would keep an absent oscillator powered and stall every operation.
-    g_radio.setTCXO(0);
+    // No setTCXO() here. RadioLib's begin() already probes the reference: it
+    // configures DIO3 for a TCXO, and if the chip comes back with
+    // XOSC_START_ERR -- an XTAL module being told it has a TCXO -- it drops to
+    // 0 V and reconfigures itself. Calling setTCXO(0) afterwards is not a
+    // hint, it is reset(true): a hard chip reset that discards every setting
+    // applied above and leaves the radio on RadioLib's 434 MHz defaults.
     g_radio.setCurrentLimit(140.0f);
 
     config_ = cfg;
