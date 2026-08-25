@@ -55,8 +55,8 @@ jobs:
       - name: Install PlatformIO
         run: pip install --upgrade platformio
       # package.sh runs the same `pio run`, then gates the app image on the
-      # 0xE9 magic and the OTA slot size M5Launcher installs into, and emits
-      # the app/merged pair.
+      # 0xE9 magic and the OTA slot size M5Launcher installs into. The app
+      # image is the only one released; see the note at the top of the script.
       - name: Build release binaries
         run: tools/package.sh
       - name: Report image sizes

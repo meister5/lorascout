@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# Builds the firmware and produces the two binary flavours that matter:
+# Builds the firmware and produces the release image:
 #
 #   dist/lorascout-app.bin      raw app image  -> M5Launcher (SD/WebUI/OTA)
-#   dist/lorascout-merged.bin   full image     -> M5Burner / esptool
+#
+# Only the app image ships. A merged bootloader+partitions+app image was built
+# here too, for M5Burner and for esptool at offset 0x0, and nothing used it:
+# M5Launcher is how this firmware gets installed, and anyone with the toolchain
+# checked out flashes over USB with `pio run -e cardputer-adv -t upload`.
+# Dropping it also drops this script's dependency on esptool, boot_app0 and a
+# python that can import pyserial.
 #
 # Usage: tools/package.sh [output-dir]
 set -euo pipefail
@@ -12,11 +18,6 @@ ENVIRONMENT="cardputer-adv"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${1:-$ROOT/dist}"
 BUILD="$ROOT/.pio/build/$ENVIRONMENT"
-
-# The device has 8 MB of flash and no PSRAM (ESP32-S3FN8 on a Stamp-S3A).
-FLASH_SIZE="8MB"
-FLASH_MODE="qio"
-FLASH_FREQ="80m"
 
 # M5Launcher writes app images into an OTA partition, so the app must stay
 # comfortably inside one. Fail the build rather than ship something the
@@ -29,8 +30,6 @@ cd "$ROOT"
 "$PIO" run -e "$ENVIRONMENT"
 
 APP="$BUILD/firmware.bin"
-BOOTLOADER="$BUILD/bootloader.bin"
-PARTITIONS="$BUILD/partitions.bin"
 
 app_size=$(stat -c%s "$APP")
 echo "app image: $app_size bytes (limit $MAX_APP_BYTES)"
@@ -47,53 +46,8 @@ if [ "$magic" != "e9" ]; then
     exit 1
 fi
 
-BOOT_APP0="$(find "$HOME/.platformio/packages/framework-arduinoespressif32" \
-    -name boot_app0.bin 2>/dev/null | head -1)"
-ESPTOOL="$(find "$HOME/.platformio/packages/tool-esptoolpy" \
-    -maxdepth 2 -name "esptool.py" 2>/dev/null | head -1)"
-
-# esptool.py imports pyserial, which lives in whichever environment PlatformIO
-# was installed into -- not necessarily the system python3. Take the first
-# interpreter that can actually import it rather than guessing.
-pick_python() {
-    local pio_bin candidate
-    pio_bin="$(command -v "$PIO" 2>/dev/null || true)"
-    for candidate in \
-        "${PYTHON:-}" \
-        "${pio_bin:+$(dirname "$pio_bin")/python}" \
-        "$HOME/.platformio/penv/bin/python" \
-        python3
-    do
-        [ -n "$candidate" ] || continue
-        if "$candidate" -c "import serial" >/dev/null 2>&1; then
-            echo "$candidate"
-            return 0
-        fi
-    done
-    return 1
-}
-
-if ! PYTHON_BIN="$(pick_python)"; then
-    echo "ERROR: no python with pyserial found; esptool cannot run" >&2
-    echo "       set PYTHON=/path/to/python (the one PlatformIO runs under)" >&2
-    exit 1
-fi
-
 mkdir -p "$OUT"
 cp "$APP" "$OUT/$NAME-app.bin"
-
-if [ -n "$ESPTOOL" ] && [ -n "$BOOT_APP0" ] && [ -f "$BOOT_APP0" ]; then
-    "$PYTHON_BIN" "$ESPTOOL" --chip esp32s3 merge_bin \
-        -o "$OUT/$NAME-merged.bin" \
-        --flash_mode "$FLASH_MODE" --flash_freq "$FLASH_FREQ" --flash_size "$FLASH_SIZE" \
-        0x0 "$BOOTLOADER" \
-        0x8000 "$PARTITIONS" \
-        0xe000 "$BOOT_APP0" \
-        0x10000 "$APP"
-else
-    echo "ERROR: esptool or boot_app0 not found under ~/.platformio" >&2
-    exit 1
-fi
 
 echo
 echo "artifacts in $OUT:"
