@@ -97,18 +97,17 @@ transmit are in [`docs/HARDWARE.md`](docs/HARDWARE.md).
 ```bash
 git clone https://github.com/meister5/lorascout
 cd lorascout
+
+# flash straight over USB
 pio run -e cardputer-adv -t upload
 
-# or build both release binaries at once
+# or build the release image
 tools/package.sh
 ```
 
-`tools/package.sh` writes:
-
-| File | Use |
-|---|---|
-| `dist/lorascout-app.bin` | **M5Launcher** — copy to SD, or upload via WebUI/OTA |
-| `dist/lorascout-merged.bin` | **M5Burner** custom firmware, or `esptool` at offset `0x0` |
+`tools/package.sh` writes `dist/lorascout-app.bin` — the M5Launcher image, to
+copy to SD or upload via WebUI/OTA. It is the only image released, and the only
+one the repo root carries.
 
 ### M5Launcher
 
@@ -137,14 +136,13 @@ install alongside the app image and nothing to lose when you switch firmware.
 It does not touch the OTA boot partition either, so it cannot brick a Launcher
 install; return to Launcher the way Launcher documents for your device.
 
-### M5Burner / esptool
+### Flashing over USB
 
-Use the **merged** binary — it contains the bootloader, partition table and app.
-
-```bash
-esptool --chip esp32s3 --port /dev/ttyACM0 write-flash 0x0 \
-  dist/lorascout-merged.bin
-```
+`pio run -e cardputer-adv -t upload` writes the bootloader, partition table and
+app in one go, which is what a full-flash image would have been for. There is no
+merged single-file image to hand to M5Burner or to `esptool` at offset `0x0`:
+M5Launcher is how this firmware is meant to be installed, and everyone else
+already has the toolchain in front of them.
 
 Then run the tests, which need nothing but a C++17 compiler:
 
