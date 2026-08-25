@@ -53,6 +53,9 @@ bool Storage::begin() {
         return false;
     }
 
+    // Usually a no-op: the radio shares this bus and has already brought the
+    // host up on the same three pins. Kept so the card still works if the
+    // ordering in initHardware ever changes.
     SPI.begin(sck, miso, mosi, cs);
     // The LoRa cap shares this SPI bus, so the card is clocked conservatively;
     // a corrupted log is worse than a slightly slower one.

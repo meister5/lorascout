@@ -71,13 +71,35 @@ if (ioe.begin()) {              // present == Cap LoRa-1262, absent == Cap LoRa8
 That `ioe.begin()` probe is also the clean way to auto-detect which cap is
 attached.
 
+## The other gotcha: the SPI bus is the microSD bus
+
+On the ADV the Cap-Bus SPI pins **are** the microSD pins — SCK 40, MOSI 14,
+MISO 39 — with separate chip selects (LoRa NSS 5, card CS 12). Bring the host
+up once, on those pins, before either driver runs; `SPI.begin()` is a no-op
+afterwards, so whichever peripheral initialises first is the one that decides
+the pin map.
+
+## And a third: do not call `setTCXO(0)` after `begin()`
+
+RadioLib's `begin()` already negotiates the reference. It configures DIO3 for a
+TCXO and, if the chip answers with `XOSC_START_ERR` — an XTAL module told it has
+one — drops to 0 V and reconfigures itself. `setTCXO(0)` is not a hint to that
+process: it is `reset(true)`, a hard chip reset that discards frequency,
+bandwidth, spreading factor and sync word and leaves the radio on RadioLib's
+434 MHz defaults.
+
 ## Libraries
 
 - **M5Unified** + **M5GFX** — board init, display, keyboard.
-- **RadioLib** — SX1262 driver. Construct as
-  `SX1262 radio = new Module(GPIO_NUM_5, GPIO_NUM_4, GPIO_NUM_3, GPIO_NUM_6);`
-  (NSS, IRQ, RST, BUSY). RadioLib picks up the SPI pins from M5Unified's board
-  defaults, so MOSI/MISO/SCK need no manual wiring.
+- **RadioLib** — SX1262 driver. Construct it with the bus named:
+  `SX1262 radio = new Module(GPIO_NUM_5, GPIO_NUM_4, GPIO_NUM_3, GPIO_NUM_6, SPI);`
+  (NSS, IRQ, RST, BUSY, bus) and call `SPI.begin(40, 39, 14, -1)` yourself first.
+  RadioLib does **not** learn the SPI pins from M5Unified. The four-argument
+  constructor makes it call `SPI.begin()` with no arguments, which lands on the
+  ESP32-S3 variant defaults — SCK 12, MISO 13, MOSI 11 — so the SX1262 never
+  answers and `begin()` returns `RADIOLIB_ERR_CHIP_NOT_FOUND` (-2). Passing the
+  bus object also stops RadioLib calling `SPI.end()` on a failed probe, which
+  would tear down the bus the microSD slot shares.
 - **TinyGPSPlus** — ⚠️ use the **M5Stack fork from GitHub**, not the copy in the
   Arduino Library Manager.
 
