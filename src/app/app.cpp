@@ -57,8 +57,17 @@ void App::begin() {
     auto cfg = M5.config();
     M5.begin(cfg);
     uiBegin();
-    keys_.begin();
     settings_.load();
+
+    if (!keys_.begin()) {
+        fatalTitle_ = "WRONG BOARD";
+        fatalDetail_ = "The keyboard controller did not come up. lorascout "
+                       "needs a Cardputer ADV.";
+        fatalHint_ = nullptr;
+        screen_ = Screen::Fatal;
+        drawCurrentScreen();
+        return;
+    }
 
     if (!initHardware()) {
         screen_ = Screen::Fatal;

@@ -1,14 +1,35 @@
 #include "keys.h"
 
 #include <M5Cardputer.h>
+#include <M5Unified.h>
 
 namespace lorascout {
 namespace hal {
 
-bool Keys::begin() { return true; }
+bool Keys::begin() {
+    // The ADV's keyboard is a TCA8418 on the internal I2C bus (G8/G9, INT on
+    // G11) and it boots asleep: without this init nothing ever reaches the
+    // event FIFO and every poll returns None. M5.begin() does not do it.
+    //
+    // Keyboard_Class::begin() picks its reader from M5.getBoard(), which M5GFX
+    // resolves during M5.begin() by probing G8/G9. If that probe ever comes
+    // back as the original Cardputer, the reader it installs drives G8/G9 as
+    // 74HC138 outputs -- which on the ADV is the I2C bus the codec, the IMU and
+    // the Cap's IO expander all sit on. Refuse rather than wreck the bus.
+    if (M5.getBoard() != m5::board_t::board_M5CardputerADV) return false;
+
+    M5Cardputer.Keyboard.begin();
+    return true;
+}
 
 Key Keys::poll() {
-    M5Cardputer.update();
+    // Not M5Cardputer.update(): its keyboard half is gated on a private flag
+    // that only M5Cardputer.begin() sets, and this firmware calls M5.begin()
+    // itself. Drive the two halves directly.
+    M5.update();
+    M5Cardputer.Keyboard.updateKeyList();
+    M5Cardputer.Keyboard.updateKeysState();
+
     if (!M5Cardputer.Keyboard.isChange()) return Key::None;
     if (!M5Cardputer.Keyboard.isPressed()) return Key::None;
 
