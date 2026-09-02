@@ -8,8 +8,7 @@ LoRa-1262.**
 
 Walk or drive a route and it records what the SX1262 hears at every GPS fix
 along it. You end up with a microSD card holding a CSV, plus GeoJSON, KML and
-GPX files you can open directly in geojson.io, Google Earth or QGIS. I have
-surveyed with it on my own ADV.
+GPX files you can open directly in geojson.io, Google Earth or QGIS.
 
 The cap carries two radios that are normally used side by side, GPS for position
 and LoRa for the mesh. I pair them instead: the GNSS receiver is there to record
