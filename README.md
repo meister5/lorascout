@@ -3,210 +3,69 @@
 [![CI](https://github.com/meister5/lorascout/actions/workflows/ci.yml/badge.svg)](https://github.com/meister5/lorascout/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**A LoRa coverage mapper I wrote for the M5Stack Cardputer ADV with the Cap
-LoRa-1262.**
+LoRa coverage mapper for the M5Stack Cardputer ADV with the Cap LoRa-1262: it logs what the SX1262 hears at every GPS fix.
 
-Walk or drive a route and it records what the SX1262 hears at every GPS fix
-along it. You end up with a microSD card holding a CSV, plus GeoJSON, KML and
-GPX files you can open directly in geojson.io, Google Earth or QGIS.
+## Features
 
-The cap carries two radios that are normally used side by side, GPS for position
-and LoRa for the mesh. I pair them instead: the GNSS receiver is there to record
-where the LoRa radio was standing when it took each measurement.
-
-> **Cardputer ADV only.** The Cap LoRa-1262 talks over the rear Cap-Bus header,
-> which is present on the Cardputer ADV and CardputerZero and **absent on the
-> original Cardputer v1.1**. The v1.1 cannot run this firmware, because it
-> cannot physically carry the cap.
-
----
-
-## What it measures
-
-Three modes, answering three different questions.
-
-| Mode | Question | Needs |
-|---|---|---|
-| **Sweep** | Where is the band quiet, and where is it noisy? | one device |
-| **Listen** | Where can I hear this network from? | one device, an existing network |
-| **Beacon / Rover** | What is the real range of *this* link? | two devices |
-
-**Sweep** steps the receiver across the band, samples the noise floor at each
-channel and logs the result against your position. It transmits nothing. This is
-the mode that told me the industrial estate down the road sits on −92 dBm of
-noise, which explains why nothing gets through there.
-
-**Listen** parks on a preset (Meshtastic's regional presets, LoRaWAN, or your
-own parameters) and logs every frame it decodes, with RSSI, SNR and position. It
-also transmits nothing, so you can map a mesh's footprint without joining it or
-putting a single frame into it. By default it records a hash of each payload
-rather than the payload itself; see [Privacy](#privacy).
-
-**Beacon / Rover** is the controlled experiment. One unit sits still and
-transmits a small 19-byte frame on my own sync word while the other walks away
-from it. The rover logs RSSI, SNR, distance, bearing and the excess
-path loss over free space at every point, and counts what it missed. This is the
-only mode that transmits, and the one bound most tightly by the
-[compliance rules](docs/COMPLIANCE.md).
-
-## What comes off the card
-
-Each session gets a directory: `/lorascout/<session-id>/`.
-
-```
-session.json     what was configured, and the transmit audit trail
-sweep.csv        one row per channel sample      \
-packets.csv      one row per received frame       |  canonical, appended live
-link.csv         one row per beacon frame          |  and flushed every 5 s
-track.csv        one row per GPS fix              /
-map.geojson      derived at session close, colour-coded by signal band
-map.kml          derived, opens in Google Earth
-track.gpx        derived, the route itself
-```
-
-The CSVs are the primary record. I append them as samples arrive and flush on a
-timer, so a flat battery mid-survey costs you the last few seconds rather than
-the whole session. I generate the map files once, at session close, from those
-CSVs, and they can be regenerated later. That is what the "unexported session
-found" prompt on the menu offers to do.
-
-I colour points on a single shared scale, so the colours on the device and the
-colours in QGIS mean the same thing:
-
-| Band | RSSI | Colour |
-|---|---|---|
-| Excellent | ≥ −80 dBm | green |
-| Good | −80 … −95 | light green |
-| Fair | −95 … −105 | yellow |
-| Weak | −105 … −115 | orange |
-| Marginal | < −115 dBm | red |
-| None | frame missed | grey |
+- Sweep mode: steps across the band and logs the noise floor per channel. Transmits nothing.
+- Listen mode: logs every frame decoded on a preset (Meshtastic, LoRaWAN or custom) with RSSI, SNR and position. Transmits nothing.
+- Beacon and Rover modes: one unit transmits a 19-byte frame, the other logs RSSI, SNR, distance, bearing and missed frames. Only these transmit.
+- Duty-cycle budget and next-legal-transmit countdown on screen; the transmit path refuses when the budget is spent.
+- Output on microSD: CSV logs plus GeoJSON, KML and GPX, colour-coded by signal band.
+- Listen mode stores a payload hash by default, not the payload.
 
 ## Hardware
 
-- **M5Stack Cardputer ADV** (ESP32-S3FN8, 8 MB flash, no PSRAM, microSD)
-- **Cap LoRa-1262** (SKU U214): Semtech SX1262 + ATGM336H-6N GNSS
-- a microSD card, and the two stock antennas
+- M5Stack Cardputer ADV (ESP32-S3FN8, 8 MB flash, no PSRAM) and a microSD card
+- Cap LoRa-1262 (SX1262 + ATGM336H-6N GNSS) with its antennas
 
-Wiring, the pin map, and the antenna-switch gotcha that silently broke transmit
-for me are in [`docs/HARDWARE.md`](docs/HARDWARE.md).
+Cardputer ADV only. The cap uses the rear Cap-Bus header, which the original Cardputer v1.1 does not have. Pin map and notes: [docs/HARDWARE.md](docs/HARDWARE.md).
 
-## Build and flash
+## Install
 
-```bash
-git clone https://github.com/meister5/lorascout
-cd lorascout
-
-# flash straight over USB
-pio run -e cardputer-adv -t upload
-
-# or build the release image
-tools/package.sh
-```
-
-`tools/package.sh` writes `dist/lorascout-app.bin`, the M5Launcher image, which
-you copy to SD or upload via WebUI/OTA. It is the only image released, and the
-only one the repo root carries.
-
-### M5Launcher
-
-Launcher installs application binaries into an OTA app partition, so use the
-**app** binary. A prebuilt copy sits at the repo root, refreshed at each
-release, so you do not have to build anything:
-
-<https://raw.githubusercontent.com/meister5/lorascout/main/lorascout-app.bin>
-
-That URL is directly downloadable, which is what an `OTA > Favorites` entry
-needs. To install from SD instead:
+Prebuilt image: [lorascout-app.bin](https://raw.githubusercontent.com/meister5/lorascout/main/lorascout-app.bin) (M5Launcher app binary).
 
 1. Copy `lorascout-app.bin` to a FAT32 SD card.
-2. In Launcher, open `SD`, select the file, choose `Install`.
+2. In M5Launcher open `SD`, select the file, choose `Install`.
 
-It also works through `WUI` (browser upload) or as an `OTA > Favorites` entry
-pointing at a release asset URL. The build is around 650 kB, well inside a
-standard OTA slot, and `tools/package.sh` fails the build if it ever outgrows
-one.
+The raw URL also works as an `OTA > Favorites` entry, and the file can be uploaded through the launcher's WebUI.
 
-I keep no filesystem partition of my own. Settings live in NVS and survey data
-goes to the microSD card, so there is nothing for Launcher to install alongside
-the app image and nothing to lose when you switch firmware. I do not touch the
-OTA boot partition either, so this cannot brick a Launcher install; return to
-Launcher the way Launcher documents for your device.
+## Usage
 
-### Flashing over USB
+On first boot you must pick a region. There is no default, because a wrong default is a transmission on the wrong frequency at the wrong power. Set your antenna gain in Settings; power limits are stored as EIRP, so a higher-gain antenna lowers transmit power.
 
-`pio run -e cardputer-adv -t upload` writes the bootloader, partition table and
-app in one go. I do not ship a merged single-file image for M5Burner or for
-`esptool` at offset `0x0`, since M5Launcher is how I install it and anyone
-flashing over USB already has the toolchain set up.
+| Key | Action |
+|---|---|
+| `;` `.` | Up, down |
+| `,` `/` | Left, right (change a value) |
+| `Enter` | Select, start or stop a session |
+| `` ` `` or `del` | Back |
 
-Then run the tests, which need nothing but a C++17 compiler:
+Main menu: Sweep, Listen, Rover, Beacon, Settings.
+
+Each session writes to `/lorascout/<session-id>/` on the card:
+
+| File | Content |
+|---|---|
+| `session.json` | Configuration and transmit audit trail |
+| `sweep.csv`, `packets.csv`, `link.csv`, `track.csv` | Live logs: channel samples, received frames, beacon frames, GPS fixes |
+| `points.geojson`, `points.kml` | Map files, written at session close |
+| `track.gpx` | The route |
+
+The menu offers to regenerate the map files for sessions that were not exported.
+
+Legal and RF: the firmware will not transmit outside 868-923 MHz, will not transmit on another network's sync word (the beacon uses 0x5C), floors its power calculation and stops when the duty budget is spent. Listen mode records other people's traffic. None of this replaces knowing your regulator; the operator is responsible for every transmission. Details: [docs/COMPLIANCE.md](docs/COMPLIANCE.md).
+
+## Build
+
+Requires [PlatformIO](https://platformio.org/).
 
 ```bash
-make test          # or: pio test -e native
+pio run -e cardputer-adv -t upload   # build and flash over USB
+tools/package.sh                     # release image in dist/lorascout-app.bin
+make test                            # host tests for lib/core (C++17 compiler only)
 ```
 
-I keep the geodesy, the airtime and duty-cycle maths, the region table, the NMEA
-parser, the beacon codec and the exporters in `lib/core/` with no Arduino
-headers, which is why CI runs them on a plain Ubuntu runner in seconds, and why
-a bad bearing calculation shows up on my laptop rather than halfway up a hill.
+## License
 
-## First boot
-
-I ask for your **region** before the firmware will do anything else, and there
-is deliberately no default: a wrong default is a transmission on the wrong
-frequency at the wrong power. If you have fitted a non-stock antenna, set its
-gain too. I store power limits as EIRP, so a higher-gain antenna makes lorascout
-*reduce* transmit power to compensate.
-
-Keys: `;` up, `.` down, `,` left/back, `/` right/select, `` ` `` or `del` to back out,
-`Enter` to start or stop a session.
-
-## Duty cycle is the real constraint
-
-Battery and storage are not what limits a survey. In EU868 at SF12 a single
-frame occupies the channel for over a second, and a 1% duty cycle means you may
-send roughly one frame every two minutes, or about 30 samples an hour, which is
-a slow walk between points. At SF7 the same budget buys a sample every five
-seconds.
-
-I keep this visible rather than letting you hit it as an error. The budget is on
-screen the whole time as a bar, the countdown to the next legal transmission
-sits next to it, and the transmit path refuses rather than warns. If you want
-dense samples, choose a fast preset and accept the shorter range.
-
-## Privacy
-
-Listen mode records other people's traffic. What I keep by default is length,
-CRC status and a 32-bit hash of the payload: enough to dedupe a repeated frame
-or recognise a persistent sender, not enough to reconstruct content. Raw payload
-retention exists, is off by default, and has to be turned on deliberately.
-Either way, `session.json` records which it was.
-
-## Layout
-
-```
-lib/core/    hardware-free logic: geodesy, airtime, regions, duty cycle,
-             NMEA, beacon codec, exporters, session model. Host-tested.
-src/hal/     the parts that touch hardware: radio, GNSS, SD, keys, cap
-src/app/     modes, UI, settings, the dual-core producer/consumer loop
-test/        one directory per suite, ~3100 assertions
-docs/        hardware notes, compliance rules, the idea backlog
-```
-
-I pin the sampler task to core 0 and give it the radio, the GNSS and the
-duty-cycle accounting. The writer and the UI run on core 1 and own the SD card
-and the screen. The two sides talk through a single queue.
-
-## Legal
-
-See [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) for what I make the firmware
-refuse, and why. In brief: it will not transmit outside 868–923 MHz, will not
-transmit on another network's sync word, floors rather than rounds its power
-calculation, and stops when the duty budget is spent. None of that replaces
-knowing your own regulator. Responsibility for a transmission is the
-operator's.
-
-## Licence
-
-MIT. See [`LICENSE`](LICENSE).
+MIT. See [LICENSE](LICENSE).
